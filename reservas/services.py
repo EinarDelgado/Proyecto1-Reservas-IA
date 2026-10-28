@@ -101,16 +101,19 @@ def disponibilidad_por_dia(resource, desde, hasta):
     dia = desde
     while dia <= hasta:
         libres = 0
+        futuras = 0
         for hora in range(HORA_APERTURA, HORA_CIERRE):
             inicio = timezone.make_aware(datetime.combine(dia, time(hora)), tz)
             fin = inicio + timedelta(hours=1)
             if inicio < ahora:
                 continue
+            futuras += 1
             if any(o_inicio < fin and o_fin > inicio for o_inicio, o_fin in ocupaciones):
                 continue
             libres += 1
 
-        if dia < hoy:
+        # Un día cuyas horas ya pasaron todas (p. ej. hoy por la noche) es "pasado", no "lleno"
+        if dia < hoy or futuras == 0:
             estado = 'pasado'
         elif libres == 0:
             estado = 'lleno'
