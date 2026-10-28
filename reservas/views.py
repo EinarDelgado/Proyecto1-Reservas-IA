@@ -6,6 +6,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.http import Http404, JsonResponse
 from django.utils import timezone
 from django.contrib.auth.decorators import login_required
+from django.contrib.admin.views.decorators import staff_member_required
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.utils.dateformat import format as date_format
@@ -15,6 +16,7 @@ from django.contrib import messages
 from django.utils.http import url_has_allowed_host_and_scheme
 from .forms import PagoForm, RepeticionForm, marca_tarjeta
 from .models import Resource, Booking, Availability, PaymentProfile
+from .prevision import DIAS_SEMANA, analizar_demanda
 from .notificaciones import enviar_cancelacion, enviar_confirmacion
 from .services import ReservaError, crear_reservas, disponibilidad_por_dia
 
@@ -329,7 +331,7 @@ def mis_reservas(request):
     ahora = timezone.now()
     return render(request, 'reservas/mis_reservas.html', {
         'proximas': [r for r in reservas if r.start_time > ahora and r.status == Booking.CONFIRMADA],
-        'historial': [r for r in reservas if r.start_time <= ahora or r.status == Booking.CANCELADA],
+        'historial': [r for r in reservas if r.start_time <= ahora or r.status == Booking.CANCELADA][:20],
         'perfil': PaymentProfile.objects.filter(user=request.user).first(),
     })
 
@@ -349,3 +351,19 @@ def cancelar_reserva(request, booking_id):
     enviar_cancelacion(reserva)
     messages.success(request, f'Reserva cancelada. Se reembolsarán ${reserva.amount} (reembolso simulado).')
     return redirect('mis_reservas')
+
+
+@staff_member_required
+def panel_demanda(request):
+    """HU3: gráficos de histórico y previsión de demanda para el administrador."""
+    recursos = list(Resource.objects.order_by('name'))
+    seleccionado = next((r for r in recursos if str(r.id) == request.GET.get('recurso')), None)
+    analisis = analizar_demanda([seleccionado] if seleccionado else recursos)
+    por_recurso = [(r, analizar_demanda([r])) for r in recursos]
+    return render(request, 'reservas/panel_demanda.html', {
+        'recursos': recursos,
+        'seleccionado': seleccionado,
+        'analisis': analisis,
+        'por_recurso': por_recurso,
+        'dias_semana': DIAS_SEMANA,
+    })
