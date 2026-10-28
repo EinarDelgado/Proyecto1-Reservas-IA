@@ -15,6 +15,7 @@ from django.contrib import messages
 from django.utils.http import url_has_allowed_host_and_scheme
 from .forms import PagoForm, RepeticionForm, marca_tarjeta
 from .models import Resource, Booking, Availability, PaymentProfile
+from .notificaciones import enviar_cancelacion, enviar_confirmacion
 from .services import ReservaError, crear_reservas, disponibilidad_por_dia
 
 
@@ -149,6 +150,7 @@ def api_crear_reserva(request):
     except ReservaError as exc:
         return JsonResponse({'success': False, 'error': str(exc)})
 
+    enviar_confirmacion(request.user, reservas)
     return JsonResponse({'success': True, 'reservas': [
         {'start': r.start_time.isoformat(), 'end': r.end_time.isoformat()} for r in reservas
     ]})
@@ -265,8 +267,8 @@ def checkout(request, resource_id):
         if form.is_valid():
             referencia = 'PAY-' + uuid.uuid4().hex[:10].upper()
             try:
-                crear_reservas(request.user, resource, start, end, form.cleaned_data['repeat_weeks'],
-                               amount=importe, payment_reference=referencia)
+                reservas = crear_reservas(request.user, resource, start, end, form.cleaned_data['repeat_weeks'],
+                                          amount=importe, payment_reference=referencia)
             except ReservaError as exc:
                 messages.error(request, str(exc))
             else:
@@ -282,6 +284,7 @@ def checkout(request, resource_id):
                             'card_last4': pago['card_number'][-4:],
                             'card_expiry': pago['card_expiry'],
                         })
+                enviar_confirmacion(request.user, reservas)
                 return redirect('reserva_confirmada', referencia=referencia)
 
     return render(request, 'reservas/checkout.html', {
@@ -343,5 +346,6 @@ def cancelar_reserva(request, booking_id):
     reserva.status = Booking.CANCELADA
     reserva.cancelled_at = timezone.now()
     reserva.save(update_fields=['status', 'cancelled_at'])
+    enviar_cancelacion(reserva)
     messages.success(request, f'Reserva cancelada. Se reembolsarán ${reserva.amount} (reembolso simulado).')
     return redirect('mis_reservas')
