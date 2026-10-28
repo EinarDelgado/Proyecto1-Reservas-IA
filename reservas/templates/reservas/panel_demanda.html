@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de demanda</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body class="bg-gray-100">
+    {% include 'reservas/_navbar.html' %}
+
+    <div class="max-w-6xl mx-auto mt-6 px-4 pb-10">
+        <div class="flex flex-wrap justify-between items-center gap-3 mb-6">
+            <h1 class="text-2xl font-bold">Previsión de demanda {% if seleccionado %}— {{ seleccionado.name }}{% else %}— todas las pistas{% endif %}</h1>
+            <form method="get">
+                <select name="recurso" onchange="this.form.submit()" class="border rounded p-2 bg-white">
+                    <option value="">Todas las pistas</option>
+                    {% for r in recursos %}
+                    <option value="{{ r.id }}" {% if seleccionado and seleccionado.id == r.id %}selected{% endif %}>{{ r.name }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+        </div>
+
+        <!-- Indicadores -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-white rounded-lg shadow p-4">
+                <p class="text-sm text-gray-500">Ocupación últimas 4 semanas</p>
+                <p class="text-3xl font-bold">{{ analisis.ocupacion_actual }}%</p>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <p class="text-sm text-gray-500">Ocupación prevista (4 semanas)</p>
+                <p class="text-3xl font-bold">{{ analisis.ocupacion_prevista }}%</p>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <p class="text-sm text-gray-500">Tendencia</p>
+                <p class="text-3xl font-bold">{{ analisis.recomendacion.tendencia }}</p>
+                <p class="text-xs text-gray-500">{{ analisis.pendiente }} h/semana</p>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <p class="text-sm text-gray-500">Horas pico</p>
+                <p class="text-2xl font-bold">{{ analisis.horas_pico|join:", "|default:"—" }}</p>
+            </div>
+        </div>
+
+        <div class="rounded-lg p-4 mb-6 {% if analisis.recomendacion.nivel == 'alta' %}bg-yellow-100 text-yellow-900{% elif analisis.recomendacion.nivel == 'baja' %}bg-blue-100 text-blue-900{% else %}bg-green-100 text-green-900{% endif %}">
+            <strong>Recomendación (demanda {{ analisis.recomendacion.nivel }}):</strong> {{ analisis.recomendacion.accion }}
+        </div>
+
+        <!-- Gráficos -->
+        <div class="bg-white rounded-lg shadow p-4 mb-6">
+            <h2 class="font-semibold mb-2">Horas reservadas por semana: histórico y previsión</h2>
+            <canvas id="grafico-semanal" height="90"></canvas>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div class="bg-white rounded-lg shadow p-4">
+                <h2 class="font-semibold mb-2">Demanda por día de la semana</h2>
+                <canvas id="grafico-dias"></canvas>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <h2 class="font-semibold mb-2">Demanda por hora del día</h2>
+                <canvas id="grafico-horas"></canvas>
+            </div>
+        </div>
+
+        <!-- Resumen por pista -->
+        <div class="bg-white rounded-lg shadow p-4">
+            <h2 class="font-semibold mb-3">Resumen por pista</h2>
+            <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-left border-b">
+                        <th class="py-2">Pista</th><th>Precio/h</th><th>Ocupación actual</th>
+                        <th>Ocupación prevista</th><th>Tendencia</th><th>Recomendación</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for recurso, a in por_recurso %}
+                    <tr class="border-b">
+                        <td class="py-2 font-medium">{{ recurso.name }}</td>
+                        <td>${{ recurso.price_per_hour }}</td>
+                        <td>{{ a.ocupacion_actual }}%</td>
+                        <td>{{ a.ocupacion_prevista }}%</td>
+                        <td>{{ a.recomendacion.tendencia }}</td>
+                        <td>{{ a.recomendacion.accion }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            <p class="text-xs text-gray-500 mt-3">
+                Método: regresión lineal sobre las horas reservadas de las últimas 12 semanas completas
+                (las reservas canceladas no cuentan). Capacidad: 12 h/día × 7 días por pista.
+            </p>
+        </div>
+    </div>
+
+    {{ analisis|json_script:"datos-demanda" }}
+    {{ dias_semana|json_script:"dias-semana" }}
+    <script>
+        const d = JSON.parse(document.getElementById('datos-demanda').textContent);
+        const dias = JSON.parse(document.getElementById('dias-semana').textContent);
+        const nHist = d.historico.length;
+
+        // La línea de previsión empieza en el último punto real para que se vea continua
+        new Chart(document.getElementById('grafico-semanal'), {
+            type: 'line',
+            data: {
+                labels: [...d.etiquetas_historico, ...d.etiquetas_prevision],
+                datasets: [
+                    {
+                        label: 'Histórico (h)',
+                        data: [...d.historico, ...d.prevision.map(() => null)],
+                        borderColor: '#2563eb', backgroundColor: '#2563eb', tension: 0.2,
+                    },
+                    {
+                        label: 'Previsión (h)',
+                        data: [...Array(nHist - 1).fill(null), d.historico[nHist - 1], ...d.prevision],
+                        borderColor: '#f59e0b', backgroundColor: '#f59e0b', borderDash: [6, 4], tension: 0.2,
+                    },
+                ],
+            },
+            options: { scales: { y: { beginAtZero: true, title: { display: true, text: 'Horas reservadas' } } } },
+        });
+
+        new Chart(document.getElementById('grafico-dias'), {
+            type: 'bar',
+            data: { labels: dias, datasets: [{ label: 'Horas', data: d.por_dia, backgroundColor: '#10b981' }] },
+            options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+        });
+
+        new Chart(document.getElementById('grafico-horas'), {
+            type: 'bar',
+            data: { labels: d.etiquetas_horas, datasets: [{ label: 'Horas', data: d.por_hora, backgroundColor: '#8b5cf6' }] },
+            options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+        });
+    </script>
+</body>
+</html>
