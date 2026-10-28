@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mis reservas</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+    {% include 'reservas/_navbar.html' %}
+
+    <div class="max-w-4xl mx-auto mt-6 px-4 pb-10">
+        <h1 class="text-2xl font-bold mb-4">Mis reservas</h1>
+
+        <div class="bg-white rounded-lg shadow p-5 mb-6">
+            <h2 class="text-lg font-semibold mb-3">Próximas</h2>
+            {% for r in proximas %}
+            <div class="flex justify-between items-center py-2 border-b last:border-0">
+                <div>
+                    <p class="font-medium">{{ r.resource.name }}</p>
+                    <p class="text-sm text-gray-600">{{ r.start_time|date:"l j M Y, H:i" }}–{{ r.end_time|date:"H:i" }} · ${{ r.amount }}</p>
+                </div>
+                <form method="post" action="{% url 'cancelar_reserva' r.id %}"
+                      onsubmit="return confirm('¿Seguro que quieres cancelar esta reserva?');">
+                    {% csrf_token %}
+                    <button type="submit" class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">Cancelar</button>
+                </form>
+            </div>
+            {% empty %}
+            <p class="text-gray-500">No tienes reservas próximas. <a href="{% url 'home' %}" class="text-blue-600 hover:underline">Reservar una pista</a></p>
+            {% endfor %}
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-5 mb-6">
+            <h2 class="text-lg font-semibold mb-3">Historial</h2>
+            {% for r in historial %}
+            <div class="flex justify-between py-2 border-b last:border-0 text-sm">
+                <span>{{ r.resource.name }} — {{ r.start_time|date:"j M Y, H:i" }}</span>
+                {% if r.status == 'cancelada' %}
+                <span class="text-red-600">Cancelada</span>
+                {% else %}
+                <span class="text-gray-500">Realizada</span>
+                {% endif %}
+            </div>
+            {% empty %}
+            <p class="text-gray-500">Sin historial.</p>
+            {% endfor %}
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-5">
+            <h2 class="text-lg font-semibold mb-3">Mis datos de pago</h2>
+            {% if perfil %}
+            <div class="flex justify-between items-center">
+                <span>💳 {{ perfil.card_brand }} •••• {{ perfil.card_last4 }} (vence {{ perfil.card_expiry }}) — {{ perfil.full_name }}</span>
+                <form method="post" action="{% url 'borrar_datos_pago' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{% url 'mis_reservas' %}">
+                    <button type="submit" class="text-red-600 hover:underline">Borrar</button>
+                </form>
+            </div>
+            {% else %}
+            <p class="text-gray-500">No tienes datos guardados. Puedes guardarlos al pagar tu próxima reserva.</p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
