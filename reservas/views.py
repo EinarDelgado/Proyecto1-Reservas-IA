@@ -33,7 +33,7 @@ def calendario(request, resource_id):
     inicio_semana = hoy - timedelta(days=hoy.weekday())  # Lunes
     dias_semana = [inicio_semana + timedelta(days=i) for i in range(7)]
 
-    reservas = Booking.objects.filter(
+    reservas = Booking.objects.activas().filter(
         resource=resource,
         start_time__date__gte=inicio_semana,
         start_time__date__lte=inicio_semana + timedelta(days=6)
@@ -67,7 +67,7 @@ def calendario_navegable(request, resource_id):
     inicio_semana = (hoy - timedelta(days=hoy.weekday())) + timedelta(days=delta)
     dias_semana = [inicio_semana + timedelta(days=i) for i in range(7)]
 
-    reservas = Booking.objects.filter(
+    reservas = Booking.objects.activas().filter(
         resource=resource,
         start_time__date__gte=inicio_semana,
         start_time__date__lte=inicio_semana + timedelta(days=6)
@@ -92,7 +92,7 @@ def calendario_full(request, resource_id):
     """
     resource = get_object_or_404(Resource, id=resource_id)
 
-    reservas = Booking.objects.filter(resource=resource).order_by('start_time')
+    reservas = Booking.objects.activas().filter(resource=resource).order_by('start_time')
     bloqueos = Availability.objects.filter(resource=resource)
 
     # Lista de reservas
@@ -201,7 +201,7 @@ def api_reservas(request, resource_id):
     """
     API que devuelve todas las reservas de un recurso en formato JSON.
     """
-    reservas = Booking.objects.filter(resource_id=resource_id).order_by('start_time')
+    reservas = Booking.objects.activas().filter(resource_id=resource_id).order_by('start_time')
     # No exponemos el nombre de otros usuarios: solo se distingue "Mi reserva"
     eventos = [
         {
@@ -317,3 +317,31 @@ def borrar_datos_pago(request):
     if url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
         return redirect(next_url)
     return redirect('home')
+
+
+@login_required
+def mis_reservas(request):
+    """HU4: listado de reservas del usuario, con opción de cancelar las futuras."""
+    reservas = Booking.objects.filter(user=request.user).select_related('resource').order_by('-start_time')
+    ahora = timezone.now()
+    return render(request, 'reservas/mis_reservas.html', {
+        'proximas': [r for r in reservas if r.start_time > ahora and r.status == Booking.CONFIRMADA],
+        'historial': [r for r in reservas if r.start_time <= ahora or r.status == Booking.CANCELADA],
+        'perfil': PaymentProfile.objects.filter(user=request.user).first(),
+    })
+
+
+@login_required
+@require_POST
+def cancelar_reserva(request, booking_id):
+    # Filtrar por usuario: una reserva ajena responde 404, como si no existiera
+    reserva = get_object_or_404(Booking, id=booking_id, user=request.user)
+    if not reserva.cancelable:
+        messages.error(request, 'Esta reserva ya no se puede cancelar.')
+        return redirect('mis_reservas')
+
+    reserva.status = Booking.CANCELADA
+    reserva.cancelled_at = timezone.now()
+    reserva.save(update_fields=['status', 'cancelled_at'])
+    messages.success(request, f'Reserva cancelada. Se reembolsarán ${reserva.amount} (reembolso simulado).')
+    return redirect('mis_reservas')

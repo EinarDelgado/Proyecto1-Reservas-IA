@@ -2,6 +2,7 @@
     <a href="{% url 'home' %}" class="text-xl font-bold">Gestor de Reservas</a>
     <div class="flex items-center gap-3">
         {% if user.is_authenticated %}
+            <a href="{% url 'mis_reservas' %}" class="hover:underline">Mis reservas</a>
             <span>Hola, {{ user.username }}</span>
             <a href="{% url 'logout' %}" class="bg-red-500 px-3 py-1 rounded hover:bg-red-600">Cerrar Sesión</a>
         {% else %}
