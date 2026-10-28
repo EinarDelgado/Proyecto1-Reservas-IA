@@ -7,8 +7,8 @@ from django.utils.dateformat import format as date_format
 from django.utils.dateparse import parse_datetime
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
+from django.utils.http import url_has_allowed_host_and_scheme
 from .models import Resource, Booking, Availability
-from .models import Resource
 
 
 # Horario por defecto (si no hay Availability definida)
@@ -175,6 +175,10 @@ def login_view(request):
         user = authenticate(request, username=username, password=password)
         if user:
             login(request, user)
+            # Volver a la página que pidió el login (p. ej. el checkout), solo si es de nuestro sitio
+            next_url = request.GET.get('next', '')
+            if url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+                return redirect(next_url)
             return redirect('/')
         else:
             messages.error(request, "Usuario o contraseña incorrectos.")
