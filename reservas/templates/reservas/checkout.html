@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirmar reserva - {{ resource.name }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+    {% include 'reservas/_navbar.html' %}
+
+    <div class="max-w-3xl mx-auto mt-6 px-4 pb-10">
+        <h1 class="text-2xl font-bold mb-4">Confirmar reserva</h1>
+
+        <!-- Resumen -->
+        <div class="bg-white rounded-lg shadow p-5 mb-6">
+            <h2 class="text-lg font-semibold">{{ resource.name }}</h2>
+            <p class="text-gray-700">{{ start|date:"l j \d\e F \d\e Y" }}, de {{ start|date:"H:i" }} a {{ end|date:"H:i" }}</p>
+            <p class="mt-2 text-xl font-bold">${{ importe }} <span class="text-sm font-normal text-gray-500">por sesión (${{ resource.price_per_hour }}/hora)</span></p>
+        </div>
+
+        {% if perfil %}
+        <!-- HU1: reserva rápida con datos guardados -->
+        <div class="bg-white rounded-lg shadow p-5 mb-6 border-2 border-blue-500" id="reserva-rapida">
+            <h2 class="text-lg font-semibold mb-2">Reservar con mis datos guardados</h2>
+            <p class="text-gray-700">{{ perfil.full_name }} · {{ perfil.phone }}</p>
+            <p class="text-gray-700 mb-4">💳 {{ perfil.card_brand }} •••• {{ perfil.card_last4 }} (vence {{ perfil.card_expiry }})</p>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="start" value="{{ start.isoformat }}">
+                <input type="hidden" name="end" value="{{ end.isoformat }}">
+                <label class="block mb-3 text-sm">
+                    {{ form_rapido.repeat_weeks.label }}
+                    <input type="number" name="repeat_weeks" min="0" max="12" value="0" class="border rounded p-1 w-20 ml-2">
+                </label>
+                <button type="submit" name="use_saved" value="1"
+                        class="w-full bg-blue-600 text-white py-3 rounded font-semibold hover:bg-blue-700">
+                    Reservar y pagar ${{ importe }}
+                </button>
+            </form>
+            <form method="post" action="{% url 'borrar_datos_pago' %}" class="mt-3 text-right">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button type="submit" class="text-sm text-red-600 hover:underline">Borrar mis datos guardados</button>
+            </form>
+        </div>
+        {% endif %}
+
+        <!-- Formulario de pago completo -->
+        <details class="bg-white rounded-lg shadow p-5" {% if mostrar_formulario %}open{% endif %}>
+            <summary class="text-lg font-semibold cursor-pointer">
+                {% if perfil %}Pagar con otra tarjeta{% else %}Datos de pago{% endif %}
+            </summary>
+            <form method="post" class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="start" value="{{ start.isoformat }}">
+                <input type="hidden" name="end" value="{{ end.isoformat }}">
+                {% for field in form_pago %}
+                    {% if field.name == 'save_data' %}
+                    <label class="md:col-span-2 flex items-center gap-2">
+                        {{ field }} {{ field.label }}
+                        <span class="text-xs text-gray-500">(solo se guardan los últimos 4 dígitos, nunca el CVV)</span>
+                    </label>
+                    {% else %}
+                    <label class="block">
+                        <span class="text-sm text-gray-700">{{ field.label }}</span>
+                        <input type="{% if field.name == 'cvv' %}password{% elif field.name == 'email' %}email{% elif field.name == 'repeat_weeks' %}number{% else %}text{% endif %}"
+                               name="{{ field.name }}" value="{{ field.value|default_if_none:'' }}"
+                               class="mt-1 w-full border rounded p-2 {% if field.errors %}border-red-500{% endif %}">
+                        {% for error in field.errors %}<span class="text-sm text-red-600">{{ error }}</span>{% endfor %}
+                    </label>
+                    {% endif %}
+                {% endfor %}
+                <button type="submit" class="md:col-span-2 bg-green-600 text-white py-3 rounded font-semibold hover:bg-green-700">
+                    Pagar ${{ importe }} y reservar
+                </button>
+                <p class="md:col-span-2 text-xs text-gray-500">Pago simulado con fines académicos: no se realiza ningún cargo real.</p>
+            </form>
+        </details>
+
+        <a href="{% url 'calendario_full' resource.id %}" class="inline-block mt-6 text-blue-600 hover:underline">← Volver al calendario</a>
+    </div>
+</body>
+</html>

@@ -1,12 +1,14 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from decimal import Decimal
 
 
 class Resource(models.Model):
     """Recurso que puede reservarse (pistas, salas, etc.)"""
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
+    price_per_hour = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('10.00'))
 
     def __str__(self):
         return self.name
@@ -33,6 +35,9 @@ class Booking(models.Model):
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    # Las reservas repetidas de un mismo pago comparten referencia
+    payment_reference = models.CharField(max_length=20, blank=True, db_index=True)
 
     def __str__(self):
         return f"Reserva de {self.resource.name} por {self.user.username}"
@@ -52,3 +57,24 @@ class Booking(models.Model):
 
     class Meta:
         unique_together = ('resource', 'start_time', 'end_time')
+
+
+class PaymentProfile(models.Model):
+    """
+    Datos de pago guardados por un usuario recurrente (HU1).
+    Por seguridad nunca se guarda el número completo de la tarjeta ni el CVV.
+    """
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='payment_profile')
+    full_name = models.CharField(max_length=120)
+    phone = models.CharField(max_length=20)
+    card_brand = models.CharField(max_length=20)
+    card_last4 = models.CharField(max_length=4)
+    card_expiry = models.CharField(max_length=5)  # MM/AA
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Datos de pago guardados'
+        verbose_name_plural = 'Datos de pago guardados'
+
+    def __str__(self):
+        return f"{self.card_brand} •••• {self.card_last4} ({self.user.username})"

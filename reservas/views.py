@@ -1,14 +1,20 @@
 import json
+import uuid
+from decimal import Decimal
 from datetime import date, datetime, timedelta, time
 from django.shortcuts import render, get_object_or_404, redirect
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
+from django.utils import timezone
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.utils.dateformat import format as date_format
 from django.utils.dateparse import parse_datetime
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.utils.http import url_has_allowed_host_and_scheme
-from .models import Resource, Booking, Availability
+from .forms import PagoForm, RepeticionForm, marca_tarjeta
+from .models import Resource, Booking, Availability, PaymentProfile
 from .services import ReservaError, crear_reservas, disponibilidad_por_dia
 
 
@@ -216,3 +222,98 @@ def home(request):
     return render(request, 'reservas/home.html', {'resources': resources})
 
 
+
+def _franja_desde(datos):
+    """Lee start/end (ISO 8601) de GET o POST; si vienen sin zona horaria se asume la local."""
+    franja = []
+    for clave in ('start', 'end'):
+        valor = parse_datetime(datos.get(clave) or '')
+        if valor and timezone.is_naive(valor):
+            valor = timezone.make_aware(valor)
+        franja.append(valor)
+    return franja
+
+
+@login_required
+def checkout(request, resource_id):
+    """
+    HU1: confirmar y pagar una reserva. Si el usuario tiene datos guardados puede
+    reservar con un solo clic sin volver a rellenar el formulario de pago.
+    """
+    resource = get_object_or_404(Resource, id=resource_id)
+    datos = request.POST if request.method == 'POST' else request.GET
+    start, end = _franja_desde(datos)
+    if not start or not end or start >= end:
+        messages.error(request, 'Franja horaria inválida. Selecciónala de nuevo en el calendario.')
+        return redirect('calendario_full', resource_id=resource.id)
+
+    perfil = PaymentProfile.objects.filter(user=request.user).first()
+    horas = Decimal((end - start).total_seconds()) / Decimal(3600)
+    importe = (resource.price_per_hour * horas).quantize(Decimal('0.01'))
+
+    usar_guardados = request.method == 'POST' and 'use_saved' in request.POST and perfil is not None
+    form_pago = PagoForm(
+        request.POST if request.method == 'POST' and not usar_guardados else None,
+        initial={'full_name': perfil.full_name if perfil else request.user.get_full_name(),
+                 'phone': perfil.phone if perfil else '',
+                 'email': request.user.email},
+    )
+    form_rapido = RepeticionForm(request.POST if usar_guardados else None)
+
+    if request.method == 'POST':
+        form = form_rapido if usar_guardados else form_pago
+        if form.is_valid():
+            referencia = 'PAY-' + uuid.uuid4().hex[:10].upper()
+            try:
+                crear_reservas(request.user, resource, start, end, form.cleaned_data['repeat_weeks'],
+                               amount=importe, payment_reference=referencia)
+            except ReservaError as exc:
+                messages.error(request, str(exc))
+            else:
+                if not usar_guardados:
+                    pago = form_pago.cleaned_data
+                    request.user.email = pago['email']
+                    request.user.save(update_fields=['email'])
+                    if pago['save_data']:
+                        PaymentProfile.objects.update_or_create(user=request.user, defaults={
+                            'full_name': pago['full_name'],
+                            'phone': pago['phone'],
+                            'card_brand': marca_tarjeta(pago['card_number']),
+                            'card_last4': pago['card_number'][-4:],
+                            'card_expiry': pago['card_expiry'],
+                        })
+                return redirect('reserva_confirmada', referencia=referencia)
+
+    return render(request, 'reservas/checkout.html', {
+        'resource': resource,
+        'start': start,
+        'end': end,
+        'importe': importe,
+        'perfil': perfil,
+        'form_pago': form_pago,
+        'form_rapido': form_rapido,
+        'mostrar_formulario': perfil is None or (request.method == 'POST' and not usar_guardados),
+    })
+
+
+@login_required
+def reserva_confirmada(request, referencia):
+    reservas = Booking.objects.filter(user=request.user, payment_reference=referencia).select_related('resource')
+    if not reservas:
+        raise Http404('Reserva no encontrada')
+    return render(request, 'reservas/confirmacion.html', {
+        'reservas': reservas,
+        'referencia': referencia,
+        'total': sum(r.amount for r in reservas),
+    })
+
+
+@login_required
+@require_POST
+def borrar_datos_pago(request):
+    PaymentProfile.objects.filter(user=request.user).delete()
+    messages.success(request, 'Tus datos de pago guardados se han eliminado.')
+    next_url = request.POST.get('next', '')
+    if url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+        return redirect(next_url)
+    return redirect('home')
