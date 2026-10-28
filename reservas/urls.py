@@ -8,6 +8,9 @@ urlpatterns = [
     path('api/reservas/<int:resource_id>/', views.api_reservas, name='api_reservas'),
     path('api/reservas/crear/', views.api_crear_reserva, name='api_crear_reserva'),
     path('api/disponibilidad/<int:resource_id>/', views.api_disponibilidad, name='api_disponibilidad'),
+    path('reservar/<int:resource_id>/', views.checkout, name='checkout'),
+    path('reservas/confirmacion/<str:referencia>/', views.reserva_confirmada, name='reserva_confirmada'),
+    path('mis-datos-pago/borrar/', views.borrar_datos_pago, name='borrar_datos_pago'),
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
 

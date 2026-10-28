@@ -1,0 +1,20 @@
+<nav class="bg-blue-600 text-white p-4 flex justify-between items-center">
+    <a href="{% url 'home' %}" class="text-xl font-bold">Gestor de Reservas</a>
+    <div class="flex items-center gap-3">
+        {% if user.is_authenticated %}
+            <span>Hola, {{ user.username }}</span>
+            <a href="{% url 'logout' %}" class="bg-red-500 px-3 py-1 rounded hover:bg-red-600">Cerrar Sesión</a>
+        {% else %}
+            <a href="{% url 'login' %}" class="bg-green-500 px-3 py-1 rounded hover:bg-green-600">Iniciar Sesión</a>
+        {% endif %}
+    </div>
+</nav>
+{% if messages %}
+<div class="max-w-3xl mx-auto mt-4 px-4">
+    {% for message in messages %}
+    <div class="p-3 mb-2 rounded {% if message.tags == 'error' %}bg-red-100 text-red-800{% else %}bg-green-100 text-green-800{% endif %}">
+        {{ message }}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

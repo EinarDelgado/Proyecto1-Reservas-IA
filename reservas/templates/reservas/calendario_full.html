@@ -273,9 +273,9 @@
                         return;
                     }
 
-                    if (confirm(`¿Quieres crear una reserva desde ${info.startStr} hasta ${info.endStr}?`)) {
-                        crearReserva(info.startStr, info.endStr);
-                    }
+                    // HU1: ir a confirmar y pagar (con datos guardados si el usuario los tiene)
+                    const params = new URLSearchParams({ start: info.startStr, end: info.endStr });
+                    window.location.href = `/reservar/${resourceId}/?${params}`;
                 },
                 eventSources: [
     {
@@ -299,54 +299,6 @@
             });
 
             calendar.render();
-
-            // === FUNCIÓN CREAR RESERVA CON REPETICIONES ===
-            function crearReserva(start, end) {
-                let repeat = prompt("¿Cuántas semanas quieres repetir esta reserva? (0 = solo esta semana)", "0");
-                if (repeat === null) return;
-                repeat = parseInt(repeat);
-                if (isNaN(repeat) || repeat < 0) repeat = 0;
-
-                fetch('/api/reservas/crear/', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': getCookie('csrftoken')
-                    },
-                    body: JSON.stringify({
-                        resource_id: resourceId,
-                        start_time: start,
-                        end_time: end,
-                        repeat_weeks: repeat
-                    })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert(`Reserva(s) creada(s) correctamente: ${data.reservas.length} reserva(s).`);
-                        calendar.refetchEvents();
-                    } else {
-                        alert(data.error || 'Error al crear la reserva.');
-                    }
-                })
-                .catch(error => console.error('Error:', error));
-            }
-
-            // Función para obtener CSRF
-            function getCookie(name) {
-                let cookieValue = null;
-                if (document.cookie && document.cookie !== '') {
-                    const cookies = document.cookie.split(';');
-                    for (let i = 0; i < cookies.length; i++) {
-                        const cookie = cookies[i].trim();
-                        if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                            break;
-                        }
-                    }
-                }
-                return cookieValue;
-            }
 
             // Botón para refrescar eventos
             var btnRefresh = document.getElementById('btn-refresh');
