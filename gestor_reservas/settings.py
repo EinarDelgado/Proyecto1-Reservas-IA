@@ -125,3 +125,8 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Las vistas protegidas con @login_required redirigen a nuestra pantalla de login
 LOGIN_URL = "/login/"
+
+# Correo (HU5): en desarrollo los correos se imprimen en la consola del servidor.
+# Para enviarlos de verdad basta con configurar EMAIL_BACKEND = smtp y sus credenciales.
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = "Gestor de Reservas <no-reply@gestor-reservas.local>"
