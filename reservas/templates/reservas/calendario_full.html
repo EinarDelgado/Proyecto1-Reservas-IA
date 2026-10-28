@@ -5,6 +5,7 @@
     <title>Calendario Interactivo - {{ resource.name }}</title>
     <link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css' rel='stylesheet' />
     <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
+    <script src='https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.11/locales/es.global.min.js'></script>
 
     <style>
         body {
@@ -87,6 +88,28 @@
             background: #dc2626;
         }
 
+        /* === LEYENDA DE DISPONIBILIDAD (HU2) === */
+        .leyenda {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin: 0 auto 16px;
+            font-size: 0.9rem;
+        }
+        .leyenda span::before {
+            content: "";
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            margin-right: 6px;
+            vertical-align: -2px;
+            border-radius: 3px;
+            background: var(--c);
+        }
+        .fc .fc-bg-event { opacity: 0.45; }
+        .fc .fc-bg-event .fc-event-title { color: #111827; font-style: normal; font-weight: 600; }
+
         .user-info {
             margin-right: 10px;
             font-weight: 500;
@@ -116,6 +139,16 @@
         ⚠️ Debes <a href="/login/" style="color:#2563eb; text-decoration:underline;">iniciar sesión</a> para crear una reserva.
     </div>
     {% endif %}
+
+    <div class="leyenda">
+        <span style="--c:#22c55e">Libre</span>
+        <span style="--c:#facc15">Parcialmente ocupado</span>
+        <span style="--c:#ef4444">Lleno / bloqueado</span>
+        <span style="--c:#d1d5db">Pasado</span>
+    </div>
+    <p style="text-align:center; color:#4b5563; margin-top:0;">
+        Haz clic en un día disponible para ver sus horas y selecciona la franja que quieres reservar.
+    </p>
 
     <!-- Botón para actualizar eventos -->
     <button id="btn-refresh">🔄 Actualizar Reservas</button>
@@ -162,14 +195,66 @@
                 return false;
             }
 
+            // === DISPONIBILIDAD POR DÍA (HU2) ===
+            const coloresEstado = { libre: '#22c55e', parcial: '#facc15', lleno: '#ef4444', pasado: '#d1d5db' };
+            const estadoPorDia = {};
+
+            function cargarDisponibilidad(info, success, failure) {
+                const desde = info.startStr.slice(0, 10);
+                const hasta = info.endStr.slice(0, 10);
+                fetch(`/api/disponibilidad/${resourceId}/?start=${desde}&end=${hasta}`)
+                    .then(r => r.json())
+                    .then(dias => {
+                        success(dias.map(d => {
+                            estadoPorDia[d.fecha] = d.estado;
+                            return {
+                                start: d.fecha,
+                                allDay: true,
+                                display: 'background',
+                                color: coloresEstado[d.estado],
+                                title: d.estado === 'pasado' ? '' : `${d.libres}/${d.total} libres`,
+                            };
+                        }));
+                    })
+                    .catch(failure);
+            }
+
             var calendar = new FullCalendar.Calendar(calendarElement, {
-                initialView: 'timeGridWeek',
+                initialView: 'dayGridMonth',
                 locale: 'es',
+                headerToolbar: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: 'dayGridMonth,timeGridWeek,timeGridDay'
+                },
+                allDaySlot: false,
+                dayMaxEvents: 2,
                 selectable: true,
                 slotMinTime: "09:00:00", // Horario inicial
                 slotMaxTime: "21:00:00", // Horario final
                 slotDuration: "01:00:00",
+                // No se puede seleccionar nada que ya haya pasado
+                selectAllow: function(sel) {
+                    return sel.start >= new Date();
+                },
+                // Vista mensual: clic en un día => abrir sus horas si tiene disponibilidad
+                dateClick: function(info) {
+                    if (info.view.type !== 'dayGridMonth') return;
+                    const estado = estadoPorDia[info.dateStr];
+                    if (estado === 'pasado') {
+                        alert('Ese día ya pasó.');
+                        return;
+                    }
+                    if (estado === 'lleno') {
+                        alert('Ese día no tiene horas disponibles. Elige un día en verde o amarillo.');
+                        return;
+                    }
+                    calendar.changeView('timeGridDay', info.dateStr);
+                },
                 select: function(info) {
+                    // En la vista mensual la selección la gestiona dateClick
+                    if (info.allDay) return;
+
                     const start = new Date(info.startStr);
                     const end = new Date(info.endStr);
 
@@ -204,6 +289,10 @@
         events: JSON.parse('{{ bloqueos_json|escapejs }}'),
         color: '#ef4444',  // Bloqueos en rojo
         textColor: '#fff'  // Texto en blanco
+    },
+    {
+        id: 'disponibilidad',
+        events: cargarDisponibilidad
     }
 ]
 
