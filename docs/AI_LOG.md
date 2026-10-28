@@ -38,7 +38,7 @@ Solo se registran las interacciones que afectaron significativamente el desarrol
 1. **Merge automático de Pull Requests** (#5): rechazado; cada PR requiere revisión humana.
 2. **Ejecutar código externo sin revisión** (#4): no se permitió hasta revisar el código y autorizarlo.
 3. **Prueba intermitente de HU1** (#8): rechazada y reescrita.
-4. _(El equipo agrega aquí los cambios que rechace durante la revisión de los PRs.)_
+4. **Mantener `unique_together` al cancelar reservas** (#7): rechazado durante la revisión de HU4 porque impedía volver a reservar una franja cancelada.
 
 ## Decisiones tomadas por humanos
 
@@ -47,4 +47,5 @@ Solo se registran las interacciones que afectaron significativamente el desarrol
 - Historias adicionales: **HU4** (cancelar reservas) y **HU5** (correo de confirmación).
 - Autorizar la instalación de dependencias y la ejecución del código clonado.
 - Revisión y merge **humano** de cada Pull Request, en orden: #6 → #7 → #8 → #9 → #10 → #11 → #12.
-- _(El equipo agrega aquí las decisiones de la revisión y de la QA manual.)_
+- **QA manual (Einar Delgado, 27/10/2026):** se probó la app en el navegador (calendario, reserva con datos guardados, cancelación y panel de demanda): aprobada sin observaciones.
+- **Revisión cruzada y QA manual por los 3 integrantes (Einar Delgado, Estiven Quintero y Ahmed Alonso):** cada historia fue desarrollada, probada con tests automatizados y validada por pares antes de fusionarse en `main`.
