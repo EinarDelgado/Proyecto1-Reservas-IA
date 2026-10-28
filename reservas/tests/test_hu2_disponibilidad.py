@@ -1,6 +1,7 @@
 """HU2 - Calendario dinámico con días disponibles y ocupados."""
 import json
-from datetime import timedelta
+from datetime import datetime, time, timedelta
+from unittest import mock
 
 from django.contrib.auth.models import User
 from django.test import TestCase
@@ -42,6 +43,13 @@ class DisponibilidadPorDiaTests(TestCase):
     def test_dia_anterior_a_hoy_es_pasado(self):
         ayer = timezone.localdate() - timedelta(days=1)
         self.assertEqual(self.estado(ayer)['estado'], 'pasado')
+
+    def test_dia_cuyas_horas_ya_pasaron_es_pasado_y_no_lleno(self):
+        # Bug encontrado en la prueba de humo: hoy a las 22:00 aparecía en rojo como "lleno"
+        hoy = timezone.localdate()
+        noche = timezone.make_aware(datetime.combine(hoy, time(22)))
+        with mock.patch('reservas.services.timezone.now', return_value=noche):
+            self.assertEqual(disponibilidad_por_dia(self.pista, hoy, hoy)[0]['estado'], 'pasado')
 
     def test_reservas_de_otra_pista_no_afectan(self):
         otra = Resource.objects.create(name='Pista 2')
