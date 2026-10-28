@@ -19,7 +19,7 @@ class ReservaError(Exception):
 
 
 def franja_ocupada(resource, start, end):
-    return Booking.objects.filter(
+    return Booking.objects.activas().filter(
         resource=resource, start_time__lt=end, end_time__gt=start
     ).exists()
 
@@ -88,7 +88,7 @@ def disponibilidad_por_dia(resource, desde, hasta):
     # Una sola consulta por tabla para todo el rango
     ocupaciones = [
         (b.start_time, b.end_time)
-        for b in Booking.objects.filter(resource=resource, start_time__lt=fin_rango, end_time__gt=inicio_rango)
+        for b in Booking.objects.activas().filter(resource=resource, start_time__lt=fin_rango, end_time__gt=inicio_rango)
     ] + [
         (b.start_time, b.end_time)
         for b in Availability.objects.filter(resource=resource, start_time__lt=fin_rango, end_time__gt=inicio_rango)
